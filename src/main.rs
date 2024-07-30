@@ -1,4 +1,7 @@
-use std::{fs, process::Command};
+use std::{
+    fs,
+    process::{Command, ExitStatus},
+};
 
 use clap::Parser;
 use sdcc::{cli::Cli, compile::do_compile};
@@ -25,12 +28,16 @@ fn main() {
         panic!("{}", e);
     }
 
-    let _assemble_output = Command::new("gcc")
+    let assemble_output = Command::new("gcc")
         .arg(&assembly_file)
         .arg("-o")
         .arg(&output_file)
         .output()
         .expect("failed to assemble");
+
+    if !assemble_output.status.success() {
+        panic!("{}", String::from_utf8(assemble_output.stderr).unwrap());
+    }
 
     fs::remove_file(&PREPROCESS_FILE).expect("failed to delete preprocessed file");
     // fs::remove_file(&assembly_file).expect("failed to delete assembly file");

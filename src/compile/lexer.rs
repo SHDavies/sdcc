@@ -8,13 +8,21 @@ pub type Tokens = VecDeque<Token>;
 #[derive(PartialEq, Clone, Debug)]
 pub enum Token {
     Ident(String),
-    IntConstant(isize),
+    IntConstant(i32),
     Keyword(Keyword),
+    UnaryOp(UnaryOp),
     OpenParen,
     CloseParen,
     OpenBrace,
     CloseBrace,
     Semi,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum UnaryOp {
+    BitwiseComp,
+    Negate,
+    Decrement,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -44,6 +52,7 @@ lazy_static! {
     static ref INT_KEYWORD: Regex = Regex::new(r"^int\b").unwrap();
     static ref VOID_KEYWORD: Regex = Regex::new(r"^void\b").unwrap();
     static ref RETURN_KEYWORD: Regex = Regex::new(r"^return\b").unwrap();
+    static ref DECREMENT_OP: Regex = Regex::new(r"^--").unwrap();
 }
 
 pub fn do_lexing(source: String) -> Result<Tokens, LexerErr> {
@@ -54,6 +63,7 @@ pub fn do_lexing(source: String) -> Result<Tokens, LexerErr> {
         tokens.push_back(token);
         curr_src = new_src;
     }
+    dbg!(&tokens);
     Ok(tokens)
 }
 
@@ -71,6 +81,8 @@ fn pop_next(source: &str) -> Result<(Token, &str), LexerErr> {
             Token::IntConstant(int_const.as_str().parse().expect("invalid int")),
             &source[int_const.len()..],
         ))
+    } else if DECREMENT_OP.is_match(source) {
+        Ok((Token::UnaryOp(UnaryOp::Decrement), &source[2..]))
     } else {
         let t = match source.chars().nth(0) {
             Some('(') => Ok(Token::OpenParen),
@@ -78,6 +90,8 @@ fn pop_next(source: &str) -> Result<(Token, &str), LexerErr> {
             Some('{') => Ok(Token::OpenBrace),
             Some('}') => Ok(Token::CloseBrace),
             Some(';') => Ok(Token::Semi),
+            Some('~') => Ok(Token::UnaryOp(UnaryOp::BitwiseComp)),
+            Some('-') => Ok(Token::UnaryOp(UnaryOp::Negate)),
             Some(t) => Err(LexerErr::InvalidToken(t.to_string())),
             None => Err(LexerErr::NoToken),
         }?;

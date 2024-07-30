@@ -11,4 +11,6 @@ pub struct Cli {
     pub parse: bool,
     #[arg(long)]
     pub codegen: bool,
+    #[arg(long)]
+    pub tac: bool,
 }
