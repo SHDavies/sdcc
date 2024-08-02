@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use super::codegen::{AFunction, AProgram, AUnary, Instruction, Operand, Reg};
+use super::codegen::{ABinary, AFunction, AProgram, AUnary, Instruction, Operand, Reg};
 
 pub fn write_assembly(ast: AProgram, path: &PathBuf) -> io::Result<()> {
     let mut file = File::create(path)?;
@@ -41,9 +41,22 @@ fn write_instruction(instruction: Instruction, file: &mut File) -> io::Result<()
             writeln!(file, "\tret")
         }
         Instruction::Unary(op, operand) => {
-            let operator = write_operator(op);
+            let operator = write_unary(op);
             let operand = write_operand(operand);
             writeln!(file, "\t{} {}", operator, operand)
+        }
+        Instruction::Binary(op, src, dst) => {
+            let operator = write_binary(op);
+            let src = write_operand(src);
+            let dst = write_operand(dst);
+            writeln!(file, "\t{} {}, {}", operator, src, dst)
+        }
+        Instruction::IDiv(src) => {
+            let src = write_operand(src);
+            writeln!(file, "\tidivl {}", src)
+        }
+        Instruction::Cdq => {
+            writeln!(file, "\tcdq")
         }
         Instruction::AllocateStack(size) => {
             writeln!(file, "\tsubq ${}, %rsp", size)
@@ -51,7 +64,15 @@ fn write_instruction(instruction: Instruction, file: &mut File) -> io::Result<()
     }
 }
 
-fn write_operator(op: AUnary) -> String {
+fn write_binary(op: ABinary) -> String {
+    match op {
+        ABinary::Add => "addl".into(),
+        ABinary::Sub => "subl".into(),
+        ABinary::Mult => "imull".into(),
+    }
+}
+
+fn write_unary(op: AUnary) -> String {
     match op {
         AUnary::Neg => "negl".into(),
         AUnary::Not => "notl".into(),
@@ -62,7 +83,9 @@ fn write_operand(op: Operand) -> String {
     match op {
         Operand::Imm(c) => format!("${}", c),
         Operand::Reg(Reg::AX) => "%eax".into(),
+        Operand::Reg(Reg::DX) => "%edx".into(),
         Operand::Reg(Reg::R10) => "%r10d".into(),
+        Operand::Reg(Reg::R11) => "%r11d".into(),
         Operand::Stack(offset) => format!("{}(%rbp)", offset),
         _ => panic!("unsupported operand"),
     }

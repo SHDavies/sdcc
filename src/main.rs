@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    process::{Command, ExitStatus},
-};
+use std::{fs, process::Command};
 
 use clap::Parser;
 use sdcc::{cli::Cli, compile::do_compile};

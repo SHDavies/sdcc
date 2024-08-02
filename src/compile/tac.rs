@@ -3,7 +3,9 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use super::parser::{Expr, Function, Identifier, Program, Statement, UnaryOperation};
+use super::parser::{
+    BinaryOperator, Expr, Function, Identifier, Program, Statement, UnaryOperator,
+};
 
 #[derive(Debug)]
 pub struct TACProgram(pub TACFunction);
@@ -14,7 +16,19 @@ pub struct TACFunction(pub Identifier, pub Vec<TACInstruction>);
 #[derive(Debug)]
 pub enum TACInstruction {
     Return(Val),
+    // Operator, src, dst
     Unary(TACUnary, Val, Val),
+    // Operator, src1, src2, dst
+    Binary(TACBinary, Val, Val, Val),
+}
+
+#[derive(Debug)]
+pub enum TACBinary {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Remainder,
 }
 
 #[derive(Debug)]
@@ -79,16 +93,35 @@ fn tac_expr(expr: Expr, instructions: &mut Vec<TACInstruction>) -> Result<Val, T
             let src = tac_expr(*inner, instructions)?;
             let dst_name = make_temp();
             let dst = Val::Var(Identifier(dst_name));
-            let op = tac_op(op);
+            let op = tac_unary_op(op);
             instructions.push(TACInstruction::Unary(op, src, dst.clone()));
+            Ok(dst)
+        }
+        Expr::Binary(operator, lhs, rhs) => {
+            let lhs_val = tac_expr(*lhs, instructions)?;
+            let rhs_val = tac_expr(*rhs, instructions)?;
+            let dst_name = make_temp();
+            let dst = Val::Var(Identifier(dst_name));
+            let op = tac_binary_op(operator);
+            instructions.push(TACInstruction::Binary(op, lhs_val, rhs_val, dst.clone()));
             Ok(dst)
         }
     }
 }
 
-fn tac_op(op: UnaryOperation) -> TACUnary {
+fn tac_unary_op(op: UnaryOperator) -> TACUnary {
     match op {
-        UnaryOperation::BitwiseComp => TACUnary::BitwiseComp,
-        UnaryOperation::Negate => TACUnary::Negate,
+        UnaryOperator::BitwiseComp => TACUnary::BitwiseComp,
+        UnaryOperator::Negate => TACUnary::Negate,
+    }
+}
+
+fn tac_binary_op(op: BinaryOperator) -> TACBinary {
+    match op {
+        BinaryOperator::Add => TACBinary::Add,
+        BinaryOperator::Subtract => TACBinary::Subtract,
+        BinaryOperator::Multiply => TACBinary::Multiply,
+        BinaryOperator::Divide => TACBinary::Divide,
+        BinaryOperator::Remainder => TACBinary::Remainder,
     }
 }

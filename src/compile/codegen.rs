@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use super::{
     parser::Identifier,
-    tac::{TACFunction, TACInstruction, TACProgram, TACUnary, Val},
+    tac::{TACBinary, TACFunction, TACInstruction, TACProgram, TACUnary, Val},
 };
 
 #[derive(Debug)]
@@ -15,8 +15,18 @@ pub struct AFunction(pub Identifier, pub Vec<Instruction>, pub Option<i32>);
 pub enum Instruction {
     Mov(Operand, Operand),
     Unary(AUnary, Operand),
+    Binary(ABinary, Operand, Operand),
+    IDiv(Operand),
+    Cdq,
     AllocateStack(i32),
     Ret,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ABinary {
+    Add,
+    Mult,
+    Sub,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -36,7 +46,9 @@ pub enum Operand {
 #[derive(Clone, Copy, Debug)]
 pub enum Reg {
     AX,
+    DX,
     R10,
+    R11,
 }
 
 #[derive(Debug)]
@@ -95,6 +107,47 @@ fn gen_instructions_first(instruction: TACInstruction) -> Result<Vec<Instruction
                 Instruction::Unary(operator, dst_v),
             ])
         }
+        TACInstruction::Binary(TACBinary::Divide, src1, src2, dst) => {
+            let src1 = gen_operand_first(src1)?;
+            let src2 = gen_operand_first(src2)?;
+            let dst = gen_operand_first(dst)?;
+            Ok(vec![
+                Instruction::Mov(src1, Operand::Reg(Reg::AX)),
+                Instruction::Cdq,
+                Instruction::IDiv(src2),
+                Instruction::Mov(Operand::Reg(Reg::AX), dst),
+            ])
+        }
+        TACInstruction::Binary(TACBinary::Remainder, src1, src2, dst) => {
+            let src1 = gen_operand_first(src1)?;
+            let src2 = gen_operand_first(src2)?;
+            let dst = gen_operand_first(dst)?;
+            Ok(vec![
+                Instruction::Mov(src1, Operand::Reg(Reg::AX)),
+                Instruction::Cdq,
+                Instruction::IDiv(src2),
+                Instruction::Mov(Operand::Reg(Reg::DX), dst),
+            ])
+        }
+        TACInstruction::Binary(op, src1, src2, dst) => {
+            let operator = gen_binary_operator(op)?;
+            let src1 = gen_operand_first(src1)?;
+            let src2 = gen_operand_first(src2)?;
+            let dst = gen_operand_first(dst)?;
+            Ok(vec![
+                Instruction::Mov(src1, dst.clone()),
+                Instruction::Binary(operator, src2, dst),
+            ])
+        }
+    }
+}
+
+fn gen_binary_operator(operator: TACBinary) -> Result<ABinary, CodegenError> {
+    match operator {
+        TACBinary::Add => Ok(ABinary::Add),
+        TACBinary::Subtract => Ok(ABinary::Sub),
+        TACBinary::Multiply => Ok(ABinary::Mult),
+        _ => Err(CodegenError::Err("invalid binary operator".into())),
     }
 }
 
@@ -141,6 +194,23 @@ fn function_second_pass(mut function: AFunction) -> AFunction {
 
                 Instruction::Unary(op, dst)
             }
+            Instruction::IDiv(mut src) => {
+                if let Operand::Pseudo(ident) = src {
+                    src = stack.get_operand(&ident.0);
+                }
+
+                Instruction::IDiv(src)
+            }
+            Instruction::Binary(op, mut src, mut dst) => {
+                if let Operand::Pseudo(ident) = src {
+                    src = stack.get_operand(&ident.0);
+                }
+                if let Operand::Pseudo(ident) = dst {
+                    dst = stack.get_operand(&ident.0);
+                }
+
+                Instruction::Binary(op, src, dst)
+            }
             _ => instruction,
         })
         .collect();
@@ -184,15 +254,33 @@ fn function_third_pass(mut function: AFunction) -> AFunction {
     let instructions = function
         .1
         .into_iter()
-        .flat_map(|instruction| {
-            if let Instruction::Mov(Operand::Stack(src), Operand::Stack(dst)) = instruction {
+        .flat_map(|instruction| match instruction {
+            Instruction::Mov(Operand::Stack(src), Operand::Stack(dst)) => {
                 vec![
                     Instruction::Mov(Operand::Stack(src), Operand::Reg(Reg::R10)),
                     Instruction::Mov(Operand::Reg(Reg::R10), Operand::Stack(dst)),
                 ]
-            } else {
-                vec![instruction]
             }
+            Instruction::IDiv(Operand::Imm(c)) => {
+                vec![
+                    Instruction::Mov(Operand::Imm(c), Operand::Reg(Reg::R10)),
+                    Instruction::IDiv(Operand::Reg(Reg::R10)),
+                ]
+            }
+            Instruction::Binary(ABinary::Mult, src, Operand::Stack(dst)) => {
+                vec![
+                    Instruction::Mov(Operand::Stack(dst), Operand::Reg(Reg::R11)),
+                    Instruction::Binary(ABinary::Mult, src, Operand::Reg(Reg::R11)),
+                    Instruction::Mov(Operand::Reg(Reg::R11), Operand::Stack(dst)),
+                ]
+            }
+            Instruction::Binary(op, Operand::Stack(src), Operand::Stack(dst)) => {
+                vec![
+                    Instruction::Mov(Operand::Stack(src), Operand::Reg(Reg::R10)),
+                    Instruction::Binary(op, Operand::Reg(Reg::R10), Operand::Stack(dst)),
+                ]
+            }
+            _ => vec![instruction],
         })
         .collect::<Vec<Instruction>>();
 

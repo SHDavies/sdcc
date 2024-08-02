@@ -1,6 +1,8 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
-use super::lexer::{Keyword, Token, Tokens, UnaryOp};
+use lazy_static::lazy_static;
+
+use super::lexer::{Keyword, Operator, Token, Tokens};
 
 #[derive(Debug)]
 pub struct Program(pub Function);
@@ -16,11 +18,33 @@ pub enum Statement {
 #[derive(Debug)]
 pub enum Expr {
     IntConstant(i32),
-    Unary(UnaryOperation, Box<Expr>),
+    Unary(UnaryOperator, Box<Expr>),
+    Binary(BinaryOperator, Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug)]
-pub enum UnaryOperation {
+pub enum BinaryOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Remainder,
+}
+
+lazy_static! {
+    static ref OPERATOR_PRECEDENCE: HashMap<String, usize> = {
+        let mut m = HashMap::new();
+        m.insert("*".into(), 50);
+        m.insert("/".into(), 50);
+        m.insert("%".into(), 50);
+        m.insert("+".into(), 45);
+        m.insert("-".into(), 45);
+        m
+    };
+}
+
+#[derive(Debug)]
+pub enum UnaryOperator {
     BitwiseComp,
     Negate,
 }
@@ -62,12 +86,12 @@ fn parse_function(tokens: &mut Tokens) -> Result<Function, ParseError> {
 
 fn parse_statement(tokens: &mut Tokens) -> Result<Statement, ParseError> {
     expect(Token::Keyword(Keyword::Return), tokens)?;
-    let expr = parse_expression(tokens)?;
+    let expr = parse_expression(tokens, 0)?;
     expect(Token::Semi, tokens)?;
     Ok(Statement::Return(expr))
 }
 
-fn parse_expression(tokens: &mut Tokens) -> Result<Expr, ParseError> {
+fn parse_factor(tokens: &mut Tokens) -> Result<Expr, ParseError> {
     match peek(tokens) {
         Some(Token::IntConstant(_)) => {
             let t = tokens.pop_front().expect("token error");
@@ -77,14 +101,14 @@ fn parse_expression(tokens: &mut Tokens) -> Result<Expr, ParseError> {
                 Err(ParseError::SyntaxError("malformed int".into()))
             }
         }
-        Some(Token::UnaryOp(_)) => {
+        Some(Token::Operator(Operator::BitwiseComp)) | Some(Token::Operator(Operator::Minus)) => {
             let op = parse_unary(tokens)?;
-            let inner_exp = parse_expression(tokens)?;
+            let inner_exp = parse_factor(tokens)?;
             Ok(Expr::Unary(op, Box::new(inner_exp)))
         }
         Some(Token::OpenParen) => {
             tokens.pop_front();
-            let inner_exp = parse_expression(tokens)?;
+            let inner_exp = parse_expression(tokens, 0)?;
             expect(Token::CloseParen, tokens)?;
             Ok(inner_exp)
         }
@@ -92,11 +116,66 @@ fn parse_expression(tokens: &mut Tokens) -> Result<Expr, ParseError> {
     }
 }
 
-fn parse_unary(tokens: &mut Tokens) -> Result<UnaryOperation, ParseError> {
+fn parse_expression(tokens: &mut Tokens, min_prec: usize) -> Result<Expr, ParseError> {
+    let mut left = parse_factor(tokens)?;
+    let mut next_token = peek(tokens);
+    while let Some(Token::Operator(op)) = next_token {
+        let precedence =
+            get_precedence(op).ok_or(ParseError::SyntaxError("unexpected symbol".into()))?;
+        if precedence >= min_prec {
+            let operator = parse_binary(tokens)?;
+            let right = parse_expression(tokens, precedence + 1)?;
+            left = Expr::Binary(operator, Box::new(left), Box::new(right));
+            next_token = peek(tokens);
+        } else {
+            break;
+        }
+    }
+    Ok(left)
+    // match peek(tokens) {
+    //     Some(Token::IntConstant(_)) => {
+    //         let t = tokens.pop_front().expect("token error");
+    //         if let Token::IntConstant(c) = t {
+    //             Ok(Expr::IntConstant(c))
+    //         } else {
+    //             Err(ParseError::SyntaxError("malformed int".into()))
+    //         }
+    //     }
+    //     Some(Token::Operator(_)) => {
+    //         let op = parse_unary(tokens)?;
+    //         let inner_exp = parse_expression(tokens)?;
+    //         Ok(Expr::Unary(op, Box::new(inner_exp)))
+    //     }
+    //     Some(Token::OpenParen) => {
+    //         tokens.pop_front();
+    //         let inner_exp = parse_expression(tokens)?;
+    //         expect(Token::CloseParen, tokens)?;
+    //         Ok(inner_exp)
+    //     }
+    //     _ => Err(ParseError::SyntaxError("malformed syntax".into())),
+    // }
+}
+
+fn parse_binary(tokens: &mut Tokens) -> Result<BinaryOperator, ParseError> {
     let t = tokens.pop_front().ok_or(ParseError::UnexpectedEOF)?;
     match t {
-        Token::UnaryOp(UnaryOp::BitwiseComp) => Ok(UnaryOperation::BitwiseComp),
-        Token::UnaryOp(UnaryOp::Negate) => Ok(UnaryOperation::Negate),
+        Token::Operator(o) => match o {
+            Operator::Asterisk => Ok(BinaryOperator::Multiply),
+            Operator::FSlash => Ok(BinaryOperator::Divide),
+            Operator::Minus => Ok(BinaryOperator::Subtract),
+            Operator::Plus => Ok(BinaryOperator::Add),
+            Operator::Percent => Ok(BinaryOperator::Remainder),
+            _ => Err(ParseError::SyntaxError("unexpected binary operator".into())),
+        },
+        _ => Err(ParseError::SyntaxError("unexpected character".into())),
+    }
+}
+
+fn parse_unary(tokens: &mut Tokens) -> Result<UnaryOperator, ParseError> {
+    let t = tokens.pop_front().ok_or(ParseError::UnexpectedEOF)?;
+    match t {
+        Token::Operator(Operator::BitwiseComp) => Ok(UnaryOperator::BitwiseComp),
+        Token::Operator(Operator::Minus) => Ok(UnaryOperator::Negate),
         _ => Err(ParseError::SyntaxError("malformed syntax".into())),
     }
 }
@@ -121,4 +200,8 @@ fn expect(expected: Token, tokens: &mut Tokens) -> Result<(), ParseError> {
 
 fn peek(tokens: &Tokens) -> Option<&Token> {
     tokens.get(0)
+}
+
+fn get_precedence(op: &Operator) -> Option<usize> {
+    OPERATOR_PRECEDENCE.get(&op.to_string()).cloned()
 }

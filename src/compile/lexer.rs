@@ -10,7 +10,7 @@ pub enum Token {
     Ident(String),
     IntConstant(i32),
     Keyword(Keyword),
-    UnaryOp(UnaryOp),
+    Operator(Operator),
     OpenParen,
     CloseParen,
     OpenBrace,
@@ -18,11 +18,22 @@ pub enum Token {
     Semi,
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub enum UnaryOp {
+#[derive(PartialEq, Clone, Debug, strum_macros::Display)]
+pub enum Operator {
+    #[strum(to_string = "~")]
     BitwiseComp,
-    Negate,
+    #[strum(to_string = "-")]
+    Minus,
+    #[strum(to_string = "--")]
     Decrement,
+    #[strum(to_string = "*")]
+    Asterisk,
+    #[strum(to_string = "+")]
+    Plus,
+    #[strum(to_string = "/")]
+    FSlash,
+    #[strum(to_string = "%")]
+    Percent,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -82,7 +93,7 @@ fn pop_next(source: &str) -> Result<(Token, &str), LexerErr> {
             &source[int_const.len()..],
         ))
     } else if DECREMENT_OP.is_match(source) {
-        Ok((Token::UnaryOp(UnaryOp::Decrement), &source[2..]))
+        Ok((Token::Operator(Operator::Decrement), &source[2..]))
     } else {
         let t = match source.chars().nth(0) {
             Some('(') => Ok(Token::OpenParen),
@@ -90,8 +101,12 @@ fn pop_next(source: &str) -> Result<(Token, &str), LexerErr> {
             Some('{') => Ok(Token::OpenBrace),
             Some('}') => Ok(Token::CloseBrace),
             Some(';') => Ok(Token::Semi),
-            Some('~') => Ok(Token::UnaryOp(UnaryOp::BitwiseComp)),
-            Some('-') => Ok(Token::UnaryOp(UnaryOp::Negate)),
+            Some('~') => Ok(Token::Operator(Operator::BitwiseComp)),
+            Some('-') => Ok(Token::Operator(Operator::Minus)),
+            Some('*') => Ok(Token::Operator(Operator::Asterisk)),
+            Some('+') => Ok(Token::Operator(Operator::Plus)),
+            Some('/') => Ok(Token::Operator(Operator::FSlash)),
+            Some('%') => Ok(Token::Operator(Operator::Percent)),
             Some(t) => Err(LexerErr::InvalidToken(t.to_string())),
             None => Err(LexerErr::NoToken),
         }?;
