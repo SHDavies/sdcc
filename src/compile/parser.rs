@@ -29,6 +29,21 @@ pub enum BinaryOperator {
     Multiply,
     Divide,
     Remainder,
+    And,
+    Or,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessOrEqual,
+    GreaterThan,
+    GreaterOrEqual,
+}
+
+#[derive(Debug)]
+pub enum UnaryOperator {
+    BitwiseComp,
+    Negate,
+    Not,
 }
 
 lazy_static! {
@@ -39,14 +54,16 @@ lazy_static! {
         m.insert("%".into(), 50);
         m.insert("+".into(), 45);
         m.insert("-".into(), 45);
+        m.insert("<".into(), 35);
+        m.insert("<=".into(), 35);
+        m.insert(">".into(), 35);
+        m.insert(">=".into(), 35);
+        m.insert("==".into(), 30);
+        m.insert("!=".into(), 30);
+        m.insert("&&".into(), 10);
+        m.insert("||".into(), 5);
         m
     };
-}
-
-#[derive(Debug)]
-pub enum UnaryOperator {
-    BitwiseComp,
-    Negate,
 }
 
 #[derive(Clone, Debug)]
@@ -101,7 +118,9 @@ fn parse_factor(tokens: &mut Tokens) -> Result<Expr, ParseError> {
                 Err(ParseError::SyntaxError("malformed int".into()))
             }
         }
-        Some(Token::Operator(Operator::BitwiseComp)) | Some(Token::Operator(Operator::Minus)) => {
+        Some(Token::Operator(Operator::BitwiseComp))
+        | Some(Token::Operator(Operator::Minus))
+        | Some(Token::Operator(Operator::Exclamation)) => {
             let op = parse_unary(tokens)?;
             let inner_exp = parse_factor(tokens)?;
             Ok(Expr::Unary(op, Box::new(inner_exp)))
@@ -132,28 +151,6 @@ fn parse_expression(tokens: &mut Tokens, min_prec: usize) -> Result<Expr, ParseE
         }
     }
     Ok(left)
-    // match peek(tokens) {
-    //     Some(Token::IntConstant(_)) => {
-    //         let t = tokens.pop_front().expect("token error");
-    //         if let Token::IntConstant(c) = t {
-    //             Ok(Expr::IntConstant(c))
-    //         } else {
-    //             Err(ParseError::SyntaxError("malformed int".into()))
-    //         }
-    //     }
-    //     Some(Token::Operator(_)) => {
-    //         let op = parse_unary(tokens)?;
-    //         let inner_exp = parse_expression(tokens)?;
-    //         Ok(Expr::Unary(op, Box::new(inner_exp)))
-    //     }
-    //     Some(Token::OpenParen) => {
-    //         tokens.pop_front();
-    //         let inner_exp = parse_expression(tokens)?;
-    //         expect(Token::CloseParen, tokens)?;
-    //         Ok(inner_exp)
-    //     }
-    //     _ => Err(ParseError::SyntaxError("malformed syntax".into())),
-    // }
 }
 
 fn parse_binary(tokens: &mut Tokens) -> Result<BinaryOperator, ParseError> {
@@ -165,6 +162,14 @@ fn parse_binary(tokens: &mut Tokens) -> Result<BinaryOperator, ParseError> {
             Operator::Minus => Ok(BinaryOperator::Subtract),
             Operator::Plus => Ok(BinaryOperator::Add),
             Operator::Percent => Ok(BinaryOperator::Remainder),
+            Operator::And => Ok(BinaryOperator::And),
+            Operator::Or => Ok(BinaryOperator::Or),
+            Operator::EqualTo => Ok(BinaryOperator::Equal),
+            Operator::NotEqualTo => Ok(BinaryOperator::NotEqual),
+            Operator::LessThan => Ok(BinaryOperator::LessThan),
+            Operator::LessThanEqual => Ok(BinaryOperator::LessOrEqual),
+            Operator::GreaterThan => Ok(BinaryOperator::GreaterThan),
+            Operator::GreaterThanEqual => Ok(BinaryOperator::GreaterOrEqual),
             _ => Err(ParseError::SyntaxError("unexpected binary operator".into())),
         },
         _ => Err(ParseError::SyntaxError("unexpected character".into())),
@@ -176,6 +181,7 @@ fn parse_unary(tokens: &mut Tokens) -> Result<UnaryOperator, ParseError> {
     match t {
         Token::Operator(Operator::BitwiseComp) => Ok(UnaryOperator::BitwiseComp),
         Token::Operator(Operator::Minus) => Ok(UnaryOperator::Negate),
+        Token::Operator(Operator::Exclamation) => Ok(UnaryOperator::Not),
         _ => Err(ParseError::SyntaxError("malformed syntax".into())),
     }
 }

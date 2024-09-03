@@ -139,6 +139,11 @@ fn gen_instructions_first(instruction: TACInstruction) -> Result<Vec<Instruction
                 Instruction::Binary(operator, src2, dst),
             ])
         }
+        TACInstruction::Copy(_, _) => todo!(),
+        TACInstruction::Jump(_) => todo!(),
+        TACInstruction::JumpIfZero(_, _) => todo!(),
+        TACInstruction::JumpIfNotZero(_, _) => todo!(),
+        TACInstruction::Label(_) => todo!(),
     }
 }
 
@@ -147,6 +152,12 @@ fn gen_binary_operator(operator: TACBinary) -> Result<ABinary, CodegenError> {
         TACBinary::Add => Ok(ABinary::Add),
         TACBinary::Subtract => Ok(ABinary::Sub),
         TACBinary::Multiply => Ok(ABinary::Mult),
+        TACBinary::Equal => todo!(),
+        TACBinary::NotEqual => todo!(),
+        TACBinary::LessThan => todo!(),
+        TACBinary::LessOrEqual => todo!(),
+        TACBinary::GreaterThan => todo!(),
+        TACBinary::GreaterOrEqual => todo!(),
         _ => Err(CodegenError::Err("invalid binary operator".into())),
     }
 }
@@ -155,6 +166,7 @@ fn gen_unary_operator(operator: TACUnary) -> AUnary {
     match operator {
         TACUnary::BitwiseComp => AUnary::Not,
         TACUnary::Negate => AUnary::Neg,
+        TACUnary::Not => todo!(),
     }
 }
 

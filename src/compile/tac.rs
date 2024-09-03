@@ -20,6 +20,12 @@ pub enum TACInstruction {
     Unary(TACUnary, Val, Val),
     // Operator, src1, src2, dst
     Binary(TACBinary, Val, Val, Val),
+    // src, dst
+    Copy(Val, Val),
+    Jump(Identifier),
+    JumpIfZero(Val, Identifier),
+    JumpIfNotZero(Val, Identifier),
+    Label(Identifier),
 }
 
 #[derive(Debug)]
@@ -29,12 +35,21 @@ pub enum TACBinary {
     Multiply,
     Divide,
     Remainder,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessOrEqual,
+    GreaterThan,
+    GreaterOrEqual,
+    And,
+    Or,
 }
 
 #[derive(Debug)]
 pub enum TACUnary {
     BitwiseComp,
     Negate,
+    Not,
 }
 
 #[derive(Clone, Debug)]
@@ -55,6 +70,13 @@ static TMP_VAR: AtomicUsize = AtomicUsize::new(0);
 fn make_temp() -> String {
     let current = TMP_VAR.fetch_add(1, Ordering::SeqCst);
     format!("tmp.{}", current)
+}
+
+static LABEL_VAR: AtomicUsize = AtomicUsize::new(0);
+fn make_label(name: &str) -> Identifier {
+    let current = LABEL_VAR.fetch_add(1, Ordering::SeqCst);
+    let label = format!("{}.{}", name, current);
+    Identifier(label)
 }
 
 pub fn do_tac(ast: Program) -> Result<TACProgram, TACError> {
@@ -97,6 +119,58 @@ fn tac_expr(expr: Expr, instructions: &mut Vec<TACInstruction>) -> Result<Val, T
             instructions.push(TACInstruction::Unary(op, src, dst.clone()));
             Ok(dst)
         }
+        Expr::Binary(BinaryOperator::And, lhs, rhs) => {
+            let false_label = make_label("and_false");
+            let end_label = make_label("and_end");
+
+            let lhs_val = tac_expr(*lhs, instructions)?;
+            let lhs_name = make_temp();
+            let lhs_dst = Val::Var(Identifier(lhs_name));
+            instructions.push(TACInstruction::Copy(lhs_val, lhs_dst.clone()));
+            instructions.push(TACInstruction::JumpIfZero(lhs_dst, false_label.clone()));
+
+            let rhs_val = tac_expr(*rhs, instructions)?;
+            let rhs_name = make_temp();
+            let rhs_dst = Val::Var(Identifier(rhs_name));
+            instructions.push(TACInstruction::Copy(rhs_val, rhs_dst.clone()));
+            instructions.push(TACInstruction::JumpIfZero(rhs_dst, false_label.clone()));
+
+            let result_name = make_temp();
+            let result_dst = Val::Var(Identifier(result_name));
+            instructions.push(TACInstruction::Copy(Val::Constant(1), result_dst.clone()));
+            instructions.push(TACInstruction::Jump(end_label.clone()));
+
+            instructions.push(TACInstruction::Label(false_label));
+            instructions.push(TACInstruction::Copy(Val::Constant(0), result_dst.clone()));
+            instructions.push(TACInstruction::Label(end_label));
+            Ok(result_dst)
+        }
+        Expr::Binary(BinaryOperator::Or, lhs, rhs) => {
+            let true_label = make_label("or_true");
+            let end_label = make_label("or_end");
+
+            let lhs_val = tac_expr(*lhs, instructions)?;
+            let lhs_name = make_temp();
+            let lhs_dst = Val::Var(Identifier(lhs_name));
+            instructions.push(TACInstruction::Copy(lhs_val, lhs_dst.clone()));
+            instructions.push(TACInstruction::JumpIfNotZero(lhs_dst, true_label.clone()));
+
+            let rhs_val = tac_expr(*rhs, instructions)?;
+            let rhs_name = make_temp();
+            let rhs_dst = Val::Var(Identifier(rhs_name));
+            instructions.push(TACInstruction::Copy(rhs_val, rhs_dst.clone()));
+            instructions.push(TACInstruction::JumpIfNotZero(rhs_dst, true_label.clone()));
+
+            let result_name = make_temp();
+            let result_dst = Val::Var(Identifier(result_name));
+            instructions.push(TACInstruction::Copy(Val::Constant(0), result_dst.clone()));
+            instructions.push(TACInstruction::Jump(end_label.clone()));
+
+            instructions.push(TACInstruction::Label(true_label));
+            instructions.push(TACInstruction::Copy(Val::Constant(1), result_dst.clone()));
+            instructions.push(TACInstruction::Label(end_label));
+            Ok(result_dst)
+        }
         Expr::Binary(operator, lhs, rhs) => {
             let lhs_val = tac_expr(*lhs, instructions)?;
             let rhs_val = tac_expr(*rhs, instructions)?;
@@ -113,6 +187,7 @@ fn tac_unary_op(op: UnaryOperator) -> TACUnary {
     match op {
         UnaryOperator::BitwiseComp => TACUnary::BitwiseComp,
         UnaryOperator::Negate => TACUnary::Negate,
+        UnaryOperator::Not => TACUnary::Not,
     }
 }
 
@@ -123,5 +198,13 @@ fn tac_binary_op(op: BinaryOperator) -> TACBinary {
         BinaryOperator::Multiply => TACBinary::Multiply,
         BinaryOperator::Divide => TACBinary::Divide,
         BinaryOperator::Remainder => TACBinary::Remainder,
+        BinaryOperator::And => TACBinary::And,
+        BinaryOperator::Or => TACBinary::Or,
+        BinaryOperator::Equal => TACBinary::Equal,
+        BinaryOperator::NotEqual => TACBinary::NotEqual,
+        BinaryOperator::LessThan => TACBinary::LessThan,
+        BinaryOperator::LessOrEqual => TACBinary::LessOrEqual,
+        BinaryOperator::GreaterThan => TACBinary::GreaterThan,
+        BinaryOperator::GreaterOrEqual => TACBinary::GreaterOrEqual,
     }
 }

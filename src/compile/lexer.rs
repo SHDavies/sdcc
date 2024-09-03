@@ -18,7 +18,7 @@ pub enum Token {
     Semi,
 }
 
-#[derive(PartialEq, Clone, Debug, strum_macros::Display)]
+#[derive(PartialEq, Clone, Copy, Debug, strum_macros::Display)]
 pub enum Operator {
     #[strum(to_string = "~")]
     BitwiseComp,
@@ -34,6 +34,24 @@ pub enum Operator {
     FSlash,
     #[strum(to_string = "%")]
     Percent,
+    #[strum(to_string = "!")]
+    Exclamation,
+    #[strum(to_string = "&&")]
+    And,
+    #[strum(to_string = "||")]
+    Or,
+    #[strum(to_string = "==")]
+    EqualTo,
+    #[strum(to_string = "!=")]
+    NotEqualTo,
+    #[strum(to_string = "<")]
+    LessThan,
+    #[strum(to_string = ">")]
+    GreaterThan,
+    #[strum(to_string = "<=")]
+    LessThanEqual,
+    #[strum(to_string = ">=")]
+    GreaterThanEqual,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -63,7 +81,15 @@ lazy_static! {
     static ref INT_KEYWORD: Regex = Regex::new(r"^int\b").unwrap();
     static ref VOID_KEYWORD: Regex = Regex::new(r"^void\b").unwrap();
     static ref RETURN_KEYWORD: Regex = Regex::new(r"^return\b").unwrap();
+
+    // 2-char Operators
     static ref DECREMENT_OP: Regex = Regex::new(r"^--").unwrap();
+    static ref AND_OP: Regex = Regex::new(r"^&&").unwrap();
+    static ref OR_OP: Regex = Regex::new(r"^\|\|").unwrap();
+    static ref EQUAL_TO_OP: Regex = Regex::new(r"^==").unwrap();
+    static ref NOT_EQUAL_TO_OP: Regex = Regex::new(r"^!=").unwrap();
+    static ref LESS_THAN_EQUAL_OP: Regex = Regex::new(r"^<=").unwrap();
+    static ref GREATER_THAN_EQUAL_OP: Regex = Regex::new(r"^>=").unwrap();
 }
 
 pub fn do_lexing(source: String) -> Result<Tokens, LexerErr> {
@@ -92,8 +118,8 @@ fn pop_next(source: &str) -> Result<(Token, &str), LexerErr> {
             Token::IntConstant(int_const.as_str().parse().expect("invalid int")),
             &source[int_const.len()..],
         ))
-    } else if DECREMENT_OP.is_match(source) {
-        Ok((Token::Operator(Operator::Decrement), &source[2..]))
+    } else if let Some(op) = match_two_chars(source) {
+        Ok((Token::Operator(op), &source[2..]))
     } else {
         let t = match source.chars().nth(0) {
             Some('(') => Ok(Token::OpenParen),
@@ -107,6 +133,9 @@ fn pop_next(source: &str) -> Result<(Token, &str), LexerErr> {
             Some('+') => Ok(Token::Operator(Operator::Plus)),
             Some('/') => Ok(Token::Operator(Operator::FSlash)),
             Some('%') => Ok(Token::Operator(Operator::Percent)),
+            Some('!') => Ok(Token::Operator(Operator::Exclamation)),
+            Some('<') => Ok(Token::Operator(Operator::LessThan)),
+            Some('>') => Ok(Token::Operator(Operator::GreaterThan)),
             Some(t) => Err(LexerErr::InvalidToken(t.to_string())),
             None => Err(LexerErr::NoToken),
         }?;
@@ -114,6 +143,25 @@ fn pop_next(source: &str) -> Result<(Token, &str), LexerErr> {
     }
 }
 
+fn match_two_chars(source: &str) -> Option<Operator> {
+    if DECREMENT_OP.is_match(source) {
+        Some(Operator::Decrement)
+    } else if AND_OP.is_match(source) {
+        Some(Operator::And)
+    } else if OR_OP.is_match(source) {
+        Some(Operator::Or)
+    } else if EQUAL_TO_OP.is_match(source) {
+        Some(Operator::EqualTo)
+    } else if NOT_EQUAL_TO_OP.is_match(source) {
+        Some(Operator::NotEqualTo)
+    } else if LESS_THAN_EQUAL_OP.is_match(source) {
+        Some(Operator::LessThanEqual)
+    } else if GREATER_THAN_EQUAL_OP.is_match(source) {
+        Some(Operator::GreaterThanEqual)
+    } else {
+        None
+    }
+}
 fn match_keyword(word: &str) -> Option<Keyword> {
     if INT_KEYWORD.is_match(word) {
         Some(Keyword::Int)
